@@ -1,0 +1,914 @@
+<!-- https://github.com/INRIA/spoon/pull/4401/commits/504196f0d46d847965a144fdc7a00a06036b78f0 -->
+
+<!DOCTYPE html><html lang="en"><head><meta charset="utf8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>GumTree</title><link type="text/css" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet"/><style type="text/css">/*
+    * This file is part of GumTree.
+    *
+    * GumTree is free software: you can redistribute it and/or modify
+    * it under the terms of the GNU Lesser General Public License as published by
+    * the Free Software Foundation, either version 3 of the License, or
+    * (at your option) any later version.
+    *
+    * GumTree is distributed in the hope that it will be useful,
+    * but WITHOUT ANY WARRANTY; without even the implied warranty of
+    * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    * GNU Lesser General Public License for more details.
+    *
+    * You should have received a copy of the GNU Lesser General Public License
+    * along with GumTree.  If not, see &lt;http://www.gnu.org/licenses/&gt;.
+    *
+    * Copyright 2011-2015 Jean-R&eacute;my Falleri &lt;jr.falleri@gmail.com&gt;
+    * Copyright 2011-2015 Flor&eacute;al Morandat &lt;florealm@gmail.com&gt;
+    */
+   
+   .add {
+       border: 1px solid black;
+       background-color: MediumSeaGreen;
+   }
+   
+   .del {
+       border: 1px solid black;
+       background-color: IndianRed;
+   }
+   
+   .mv {
+       border: 1px solid black;
+       background-color: Lavender;
+   }
+   
+   .upd {
+       border: 1px solid black;
+       background-color: Plum;
+       font-weight: bold;
+   }
+   
+   .cupd {
+       font-weight: normal;
+       color: DimGray;
+   }
+   
+   .selected {
+       background-color: Gold;
+   }
+   
+   .marker {
+       margin: 0;
+       padding: 0;
+   }
+   
+   div {
+       margin: 0px;
+       padding: 0px;
+   }
+   
+   .pre-scrollable {
+       margin: 0px;
+       padding: 0px;
+       font-size: 10pt;
+       color: black;
+       max-height: 90vh;
+       background-color: white;
+       border: 1px solid black;
+       font-family: &quot;Hack, Inconsolata&quot;, &quot;Consolas&quot;, &quot;Liberation Sans Regular&quot;, &quot;DejaVu Sans Mono&quot;, monospace;
+   }
+   
+   .tooltip-inner {
+       max-width: none;
+   }
+   </style><script type="text/javascript" src="https://code.jquery.com/jquery-3.4.1.min.js"></script><script type="text/javascript" src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script><script type="text/javascript">/*<![CDATA[*//*
+    * This file is part of GumTree.
+    *
+    * GumTree is free software: you can redistribute it and/or modify
+    * it under the terms of the GNU Lesser General Public License as published by
+    * the Free Software Foundation, either version 3 of the License, or
+    * (at your option) any later version.
+    *
+    * GumTree is distributed in the hope that it will be useful,
+    * but WITHOUT ANY WARRANTY; without even the implied warranty of
+    * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    * GNU Lesser General Public License for more details.
+    *
+    * You should have received a copy of the GNU Lesser General Public License
+    * along with GumTree.  If not, see <http://www.gnu.org/licenses/>.
+    *
+    * Copyright 2011-2015 Jean-Rémy Falleri <jr.falleri@gmail.com>
+    * Copyright 2011-2015 Floréal Morandat <florealm@gmail.com>
+    */
+   
+   $(function(){
+       let popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+       let popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+         return new bootstrap.Popover(popoverTriggerEl)
+       })
+   
+       $("body").keypress(function (event) {
+           switch (event.which) {
+               case 116:
+                   $('html, body').animate({scrollTop: 0}, 100);
+                   break;
+               case 98:
+                   $("html, body").animate({ scrollTop: $(document).height() }, 100);
+                   break;
+               case 113:
+                   window.location = "/quit";
+                   break;
+               case 108:
+                   window.location = "/list";
+                   break;
+           }
+       });
+   });
+   /*]]>*/</script><script type="text/javascript">/*<![CDATA[*//*
+    * This file is part of GumTree.
+    *
+    * GumTree is free software: you can redistribute it and/or modify
+    * it under the terms of the GNU Lesser General Public License as published by
+    * the Free Software Foundation, either version 3 of the License, or
+    * (at your option) any later version.
+    *
+    * GumTree is distributed in the hope that it will be useful,
+    * but WITHOUT ANY WARRANTY; without even the implied warranty of
+    * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    * GNU Lesser General Public License for more details.
+    *
+    * You should have received a copy of the GNU Lesser General Public License
+    * along with GumTree.  If not, see <http://www.gnu.org/licenses/>.
+    *
+    * Copyright 2011-2015 Jean-Rémy Falleri <jr.falleri@gmail.com>
+    * Copyright 2011-2015 Floréal Morandat <florealm@gmail.com>
+    */
+   
+   currentMapping = 0;
+   
+   if (typeof String.prototype.startsWith != 'function') {
+     String.prototype.startsWith = function (str){
+       return this.slice(0, str.length) == str;
+     };
+   }
+   
+   function getMappedElement(eltId) {
+       if (eltId.startsWith("move-src")) {
+           return eltId.replace("src","dst");  	 	
+         }
+         else {
+             return eltId.replace("dst","src");
+         }
+   }
+   
+   function nextMapping() {
+       if (currentMapping == 0) {
+           currentMapping = 1;
+           return "#mapping-" + currentMapping.toString();
+       } else {
+           currentMapping++;
+           
+           if ($("#mapping-" + currentMapping.toString()).length > 0) {
+               return "#mapping-" + currentMapping.toString();
+           } else {
+               currentMapping = 1;
+               return "#mapping-" + currentMapping.toString();		
+           }		
+       }
+   }
+   
+   function isSrc(eltId) {
+       return eltId.startsWith("move-src");
+   }
+   
+   $(function() {
+       $("body").keypress(function (event) {
+           switch(event.which) {
+               case 110:
+                   var mapping = nextMapping();
+                   $('html, body').animate({scrollTop: $(mapping).offset().top - 200}, 100);
+                   break;
+           }
+       });
+   
+       // highlight
+       $("span.mv.token, span.token.upd").click(function(event) {
+           if ($(this).hasClass("selected")) {
+               $("span.mv.token, span.token.upd").removeClass("selected");
+           } else {
+               $("span.mv.token, span.token.upd").removeClass("selected");
+               var eltId = $(this).attr("id");
+               var refEltId = getMappedElement(eltId);
+               $("#" + refEltId).addClass("selected");
+               $(this).addClass("selected");
+               var sel = "#dst";
+               if (isSrc(refEltId))
+                   var sel = "#src";
+               $div = $(sel);
+               $span = $("#" + refEltId);
+           }
+           event.stopPropagation();
+       });
+   
+       $("span.add.token, span.token.del").click(function(event) {
+           $("span.mv.token, span.token.upd").removeClass("selected");
+           event.stopPropagation();
+       });
+   
+       // tooltip
+       $("span.token").hover(
+           function (event) {
+               $(this).tooltip('show');
+               event.stopPropagation();
+           },
+           function (event) {
+               $(this).tooltip('hide');
+               event.stopPropagation();
+           }
+       );
+   });
+   /*]]>*/</script></head><body><div class="container-fluid"><div class="row"><div class="col"><div class="btn-toolbar justify-content-end"><div class="btn-group mr-2"><button class="btn btn-primary btn-sm" id="legend" data-bs-toggle="popover" data-bs-placement="bottom" data-bs-html="true" data-bs-content="<span class=&quot;del&quot;>&nbsp;&nbsp;</span> deleted<br><span class=&quot;add&quot;>&nbsp;&nbsp;</span> added<br><span class=&quot;mv&quot;>&nbsp;&nbsp;</span> moved<br><span class=&quot;upd&quot;>&nbsp;&nbsp;</span> updated<br>">Legend</button><button class="btn btn-primary btn-sm" id="shortcuts" data-bs-toggle="popover" data-bs-placement="bottom" data-bs-html="true" data-bs-content="<b>q</b> quit<br><b>l</b> list<br><b>n</b> next<br><b>t</b> top<br><b>b</b> bottom">Shortcuts</button></div><div class="btn-group"><a class="btn btn-default btn-sm btn-primary" href="/list">Back</a><a class="btn btn-default btn-sm btn-danger" href="/quit">Quit</a></div></div></div></div><div class="row"><div class="col-6"><h5>left.java</h5><pre class="pre-scrollable">/**
+    * Copyright (C) 2006-2018 INRIA and contributors
+    * Spoon - http://spoon.gforge.inria.fr/
+    *
+    * This software is governed by the CeCILL-C License under French law and
+    * abiding by the rules of distribution of free software. You can use, modify
+    * and/or redistribute the software under the terms of the CeCILL-C license as
+    * circulated by CEA, CNRS and INRIA at http://www.cecill.info.
+    *
+    * This program is distributed in the hope that it will be useful, but WITHOUT
+    * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    * FITNESS FOR A PARTICULAR PURPOSE. See the CeCILL-C License for more details.
+    *
+    * The fact that you are presently reading this means that you have had
+    * knowledge of the CeCILL-C license and that you accept its terms.
+    */
+   package spoon.reflect.ast;
+   
+   <span class="marker" id="mapping-1"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import org.junit.Test;</span>
+   import spoon.Launcher;
+   import spoon.processing.AbstractProcessor;
+   import spoon.refactoring.Refactoring;
+   import spoon.reflect.CtModel;
+   import spoon.reflect.code.CtConditional;
+   import spoon.reflect.declaration.CtClass;
+   import spoon.reflect.declaration.CtElement;
+   import spoon.reflect.declaration.CtField;
+   import spoon.reflect.declaration.CtInterface;
+   import spoon.reflect.declaration.CtMethod;
+   import spoon.reflect.declaration.CtType;
+   import spoon.reflect.declaration.ModifierKind;
+   import spoon.reflect.factory.Factory;
+   import spoon.reflect.reference.CtExecutableReference;
+   import spoon.reflect.reference.CtReference;
+   import spoon.reflect.visitor.CtScanner;
+   import spoon.reflect.visitor.DefaultJavaPrettyPrinter;
+   import spoon.reflect.visitor.Query;
+   import spoon.reflect.visitor.filter.TypeFilter;
+   import spoon.support.reflect.CtExtendedModifier;
+   import spoon.support.visitor.equals.CloneHelper;
+   import spoon.testing.utils.ModelUtils;
+   
+   <span class="marker" id="mapping-2"></span><span class="token mv" id="move-src-1" data-title="CompilationUnit/ImportDeclaration">import java.io.File;</span>
+   <span class="marker" id="mapping-3"></span><span class="token mv" id="move-src-2" data-title="CompilationUnit/ImportDeclaration">import java.util.Collections;</span>
+   <span class="marker" id="mapping-4"></span><span class="token mv" id="move-src-3" data-title="CompilationUnit/ImportDeclaration">import java.util.IdentityHashMap;</span>
+   <span class="marker" id="mapping-5"></span><span class="token mv" id="move-src-4" data-title="CompilationUnit/ImportDeclaration">import java.util.List;</span>
+   <span class="marker" id="mapping-6"></span><span class="token mv" id="move-src-5" data-title="CompilationUnit/ImportDeclaration">import java.util.Map;</span>
+   <span class="marker" id="mapping-7"></span><span class="token mv" id="move-src-6" data-title="CompilationUnit/ImportDeclaration">import java.util.HashSet;</span>
+   <span class="marker" id="mapping-8"></span><span class="token mv" id="move-src-7" data-title="CompilationUnit/ImportDeclaration">import java.util.Set;</span>
+   <span class="marker" id="mapping-9"></span><span class="token mv" id="move-src-8" data-title="CompilationUnit/ImportDeclaration">import java.util.stream.Collectors;</span>
+   
+   <span class="marker" id="mapping-10"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertEquals;</span>
+   <span class="marker" id="mapping-11"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertNotEquals;</span>
+   <span class="marker" id="mapping-12"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertNotNull;</span>
+   <span class="marker" id="mapping-13"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertNull;</span>
+   <span class="marker" id="mapping-14"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertSame;</span>
+   <span class="marker" id="mapping-15"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.assertTrue;</span>
+   <span class="marker" id="mapping-16"></span><span class="token del" data-title="CompilationUnit/ImportDeclaration">import static org.junit.Assert.fail;</span>
+   import static spoon.testing.utils.Check.assertCtElementEquals;
+   
+   <span class="marker" id="mapping-17"></span><span class="token del" data-title="TypeDeclaration/Modifier">public</span> <span class="marker" id="mapping-18"></span><span class="token del" data-title="TypeDeclaration/TYPE_DECLARATION_KIND">class</span> <span class="marker" id="mapping-19"></span><span class="token del" data-title="TypeDeclaration/SimpleName">CloneTest</span> {
+   
+       @Test
+       public void testCloneMethodsDeclaredInAST() {
+           final Launcher launcher = new Launcher();
+           launcher.setArgs(new String[] {"--output-type", "nooutput" });
+           launcher.getEnvironment().setNoClasspath(true);
+           // interfaces.
+           launcher.addInputResource("./src/main/java/spoon/reflect/code");
+           launcher.addInputResource("./src/main/java/spoon/reflect/declaration");
+           launcher.addInputResource("./src/main/java/spoon/reflect/reference");
+           // implementations.
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/code");
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/declaration");
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/reference");
+           launcher.run();
+   
+           new CtScanner() {
+               @Override
+               public &lt;T&gt; void visitCtClass(CtClass&lt;T&gt; ctClass) {
+                   if (!ctClass.getSimpleName().startsWith("Ct")) {
+                       return;
+                   }
+                   final CtMethod&lt;Object&gt; clone = ctClass.getMethod("clone");
+                   assertNotNull(ctClass.getQualifiedName() + " hasn't clone method.", <span class="marker" id="mapping-20"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">clone</span>);
+                   assertTrue(<span class="marker" id="mapping-21"></span><span class="token mv" id="move-src-9" data-title="METHOD_INVOCATION_ARGUMENTS/InfixExpression">ctClass.getQualifiedName() + " hasn't Override annotation on clone method."</span>, clone.getAnnotations().stream().map(ctAnnotation -&gt; ctAnnotation.getActualAnnotation().annotationType()).collect(Collectors.toList()).contains(Override.class));
+               }
+   
+               @Override
+               public &lt;T&gt; void visitCtInterface(CtInterface&lt;T&gt; intrface) {
+                   if (!intrface.getSimpleName().startsWith("Ct")) {
+                       return;
+                   }
+                   final CtMethod&lt;Object&gt; clone = intrface.getMethod("clone");
+                   if (hasConcreteImpl(intrface)) {
+                       assertNotNull(intrface.getQualifiedName() + <span class="marker" id="mapping-22"></span><span class="token upd" id="move-src-10" data-title="InfixExpression/StringLiteral"><span class="cupd">" has</span>n<span class="cupd">'t clone method."</span></span>, <span class="marker" id="mapping-23"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">clone</span>);
+                       if (!isRootDeclaration(intrface)) {
+                           assertTrue(<span class="marker" id="mapping-24"></span><span class="token mv" id="move-src-11" data-title="METHOD_INVOCATION_ARGUMENTS/InfixExpression">intrface.getQualifiedName() + <span class="marker" id="mapping-25"></span><span class="token upd" id="move-src-12" data-title="InfixExpression/StringLiteral"><span class="cupd">" hasn't Override</span><span class="cupd">annotation on clone method."</span></span></span>,
+                                   clone.getAnnotations().stream().map(ctAnnotation -&gt; ctAnnotation.getActualAnnotation().annotationType()).collect(Collectors.toList()).contains(Override.class));
+                       }
+                   }
+               }
+   
+               private &lt;T&gt; boolean hasConcreteImpl(CtInterface&lt;T&gt; intrface) {
+                   return !Query.getElements(intrface.getFactory(), new TypeFilter&lt;CtClass&lt;?&gt;&gt;(CtClass.class) {
+                       @Override
+                       public boolean matches(CtClass&lt;?&gt; element) {
+                           return super.matches(element) &amp;&amp; element.getSuperInterfaces().contains(intrface.getReference());
+                       }
+                   }).isEmpty();
+               }
+   
+               private &lt;T&gt; boolean isRootDeclaration(CtInterface&lt;T&gt; intrface) {
+                   return "CtElement".equals(intrface.getSimpleName());
+               }
+           }.scan(launcher.getModel().getRootPackage());
+       }
+   
+       @Test
+       public void testCloneCastConditional() {
+           final Launcher launcher = new Launcher();
+           launcher.setArgs(new String[] {"--output-type", "nooutput" });
+           launcher.getEnvironment().setNoClasspath(true);
+   
+           launcher.addInputResource("./src/test/resources/spoon/test/visitor/ConditionalRes.java");
+   
+           launcher.addProcessor(new AbstractProcessor&lt;CtConditional&lt;?&gt;&gt;() {
+               @Override
+               public void process(CtConditional&lt;?&gt; conditional) {
+                   CtConditional clone = conditional.clone();
+                   assertEquals(0, conditional.getTypeCasts().size());
+                   assertEquals(0, clone.getTypeCasts().size());
+                   assertEquals(conditional, clone);
+                   conditional.addTypeCast(getFactory().Type().bytePrimitiveType());
+                   assertEquals(1, conditional.getTypeCasts().size());
+                   assertNotEquals(conditional, clone);
+                   clone = conditional.clone();
+                   assertEquals(conditional, clone);
+                   assertEquals(1, clone.getTypeCasts().size());
+               }
+           });
+           launcher.run();
+       }
+   
+       @Test
+       public void testCloneListener() {
+           // contract: it is possible to extend the cloning behavior
+   
+           // in this example extension, a listener of cloning process gets access to origin node and cloned node
+           // we check the contract with some complicated class as target of cloning
+           Factory factory = ModelUtils.build(new File("./src/main/java/spoon/reflect/visitor/DefaultJavaPrettyPrinter.java"));
+           CtType&lt;?&gt; cloneSource = factory.Type().get(DefaultJavaPrettyPrinter.class);
+           class CloneListener extends CloneHelper {
+               Map&lt;CtElement, CtElement&gt; sourceToTarget = new IdentityHashMap&lt;&gt;();
+               @Override
+               public &lt;T extends CtElement&gt; T clone(T source) {
+                   if (source == null) {
+                       return null;
+                   }
+                   T target = super.clone(source);
+                   onCloned(source, target);
+                   return target;
+               }
+               private void onCloned(CtElement source, CtElement target) {
+                   CtElement previousTarget = sourceToTarget.put(source, target);
+                   assertNull(previousTarget);
+               }
+           }
+   
+           CloneListener cl = new CloneListener();
+           CtType&lt;?&gt; cloneTarget = cl.clone(cloneSource);
+   
+           cloneSource.filterChildren(null).forEach(sourceElement -&gt; {
+               //contract: there exists cloned target for each visitable element
+               CtElement targetElement = cl.sourceToTarget.remove(sourceElement);
+               assertNotNull("Missing target for sourceElement\n" + sourceElement, <span class="marker" id="mapping-26"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">targetElement</span>);
+               assertCtElementEquals((CtElement) sourceElement, targetElement);
+           });
+           //contract: each visitable elements was cloned exactly once. No more no less.
+           assertTrue(cl.sourceToTarget.isEmpty());
+       }
+   
+       @Test
+       public void testCopyMethod() {
+           // contract: the copied method is well-formed, lookup of executable references is preserved after copying, especially for recursive methods
+           Launcher l = new Launcher();
+           l.getEnvironment().setNoClasspath(true);
+           l.addInputResource("./src/test/resources/noclasspath/A2.java");
+           l.buildModel();
+           CtClass&lt;Object&gt; klass = l.getFactory().Class().get("A2");
+           CtMethod&lt;?&gt; method = klass.getMethodsByName("c").get(0);
+           List&lt;CtExecutableReference&gt; elements = method.getElements(new TypeFilter&lt;&gt;(CtExecutableReference.class));
+           CtExecutableReference methodRef = elements.get(0);
+   
+           // the lookup is OK in the original node
+           assertSame(method, methodRef.getDeclaration());
+   
+           assertEquals("A2", methodRef.getDeclaringType().toString());
+   
+           // we copy the method
+           CtMethod&lt;?&gt; methodClone = method.copyMethod();
+           assertEquals("cCopy", methodClone.getSimpleName());
+   
+           // useful for debug
+           methodClone.getBody().insertBegin(l.getFactory().createCodeSnippetStatement("// debug info"));
+   
+           CtExecutableReference reference = methodClone.getElements(new TypeFilter&lt;&gt;(CtExecutableReference.class)).get(0);
+           // all references have been updated
+           assertEquals("cCopy", reference.getSimpleName());
+           assertSame(methodClone, reference.getDeclaration());
+           assertEquals("A2", methodClone.getDeclaringType().getQualifiedName());
+   
+           // now we may want to rename the copied method
+           Refactoring.changeMethodName(methodClone, "foo");
+           assertEquals("foo", methodClone.getSimpleName()); // the method has been changed
+           assertEquals("foo", reference.getSimpleName()); // the reference has been changed
+           assertSame(methodClone, reference.getDeclaration()); // the lookup still works
+           assertEquals("A2", methodClone.getDeclaringType().getQualifiedName());
+   
+           // one can even copy the method several times
+           methodClone = Refactoring.copyMethod(method);
+           assertEquals("cCopy", methodClone.getSimpleName());
+           methodClone = Refactoring.copyMethod(method);
+           assertEquals("cCopyX", methodClone.getSimpleName());
+       }
+   
+       @Test
+       public void testCopyType() {
+           // contract: the copied type is well formed, it never points to the initial type
+           Factory factory = ModelUtils.build(new File("./src/main/java/spoon/reflect/visitor/DefaultJavaPrettyPrinter.java"));
+           CtType&lt;?&gt; intialElement = factory.Type().get(DefaultJavaPrettyPrinter.class);
+           CtType&lt;?&gt; cloneTarget = intialElement.copyType();
+           assertEquals("spoon.reflect.visitor.DefaultJavaPrettyPrinterCopy", cloneTarget.getQualifiedName());
+           // we go over all references
+           for (CtReference reference: cloneTarget.getElements(new TypeFilter&lt;&gt;(CtReference.class))) {
+               CtElement declaration = reference.getDeclaration();
+               if (declaration == null) {
+                   continue;
+               }
+   
+               // the core assertion: not a single reference points to the initial element
+               if (declaration.hasParent(intialElement)) {
+                   fail();
+               }
+           }
+       }
+   
+       @Test
+       public void testIssue3389() {
+           // test case for https://github.com/INRIA/spoon/issues/3389
+           Launcher launcher = new Launcher();
+           launcher.addInputResource( "./src/test/resources/JavaCode.java" );
+           launcher.buildModel();
+           CtModel model = launcher.getModel();
+   
+           CtType&lt;?&gt; c = launcher.getFactory().Type().get("HelloWorld");
+   
+           // sanity check: the field is at the end as in the source
+           assertEquals(c.getFields().get(0), c.getTypeMembers().get(2));
+   
+           List&lt;CtField&lt;?&gt;&gt; fields = c.getFields();
+           for(CtField&lt;?&gt; field : fields) {
+               c.removeField(field);
+               c.addFieldAtTop(field);
+           }
+   
+           // sanity check: the field is now at the top after the implicit constructor
+           assertEquals(c.getFields().get(0), c.getTypeMembers().get(0));
+   
+           // contract: clone preserves the order
+           assertEquals(c.getFields().get(0), c.clone().getTypeMembers().get(0));
+       }
+   
+       @Test
+       public void testCloneKeepsImplicitModifierState() {
+           // contract: When cloning an element the implicit state is kept as well
+           CtClass&lt;?&gt; test = new Launcher().getFactory().createClass("Test");
+           Set&lt;CtExtendedModifier&gt; modifiers = new HashSet&lt;&gt;();
+           modifiers.add(new CtExtendedModifier(ModifierKind.PUBLIC, true));
+           modifiers.add(new CtExtendedModifier(ModifierKind.ABSTRACT, false));
+           test.setExtendedModifiers(modifiers);
+   
+           CtClass&lt;?&gt; clonedTest = test.clone();
+   
+           // Sanity checks
+           assertEquals(
+                   <span class="marker" id="mapping-27"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Class has the wrong amount of modifiers"</span>,
+                   2,
+                   test.getExtendedModifiers().size()
+           );
+           assertModifierImplicitness(test.getExtendedModifiers(), ModifierKind.PUBLIC, true);
+           assertModifierImplicitness(test.getExtendedModifiers(), ModifierKind.ABSTRACT, false);
+   
+           // Test that the implicit state was kept
+           assertEquals(
+                   <span class="marker" id="mapping-28"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Clone has wrong amount of modifiers"</span>,
+                   2,
+                   clonedTest.getExtendedModifiers().size()
+           );
+           assertModifierImplicitness(clonedTest.getExtendedModifiers(), ModifierKind.PUBLIC, true);
+           assertModifierImplicitness(clonedTest.getExtendedModifiers(), ModifierKind.ABSTRACT, false);
+       }
+   
+       private void assertModifierImplicitness(Set&lt;CtExtendedModifier&gt; modifiers, ModifierKind kind,
+               boolean shouldBeImplicit) {
+           for (CtExtendedModifier modifier : modifiers) {
+               if (modifier.getKind() == kind) {
+                   assertEquals(
+                           <span class="marker" id="mapping-29"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Unexpected CtExtendedModifier#isImplicit"</span>,
+                           shouldBeImplicit,
+                           modifier.isImplicit()
+                   );
+                   return;
+               }
+           }
+           fail("Modifier " + kind + " was not found at all in " + modifiers);
+       }
+   
+       @Test
+       public void testCloneClonesExtendedModifiers() {
+           // contract: When cloning an element the extended modifiers are cloned as well
+           CtClass&lt;?&gt; test = new Launcher().getFactory().createClass("Test");
+           Set&lt;CtExtendedModifier&gt; modifiers = new HashSet&lt;&gt;();
+           modifiers.add(new CtExtendedModifier(ModifierKind.PUBLIC, true));
+           modifiers.add(new CtExtendedModifier(ModifierKind.ABSTRACT, false));
+           test.setExtendedModifiers(modifiers);
+   
+           CtClass&lt;?&gt; clonedTest = test.clone();
+   
+           assertModifiersAreDistinctInstances(
+                   test.getExtendedModifiers(),
+                   clonedTest.getExtendedModifiers()
+           );
+       }
+   
+       private void assertModifiersAreDistinctInstances(Set&lt;CtExtendedModifier&gt; real,
+               Set&lt;CtExtendedModifier&gt; cloned) {
+           Set&lt;CtExtendedModifier&gt; referenceBasedModifierSet = Collections.newSetFromMap(
+                   new IdentityHashMap&lt;&gt;()
+           );
+           referenceBasedModifierSet.addAll(real);
+           referenceBasedModifierSet.addAll(cloned);
+   
+           // Verify the modifier instances are actually different so changes in one do not affect the other
+           assertEquals(
+                   <span class="marker" id="mapping-30"></span><span class="token del" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"The extended modifiers are the same instance as the original"</span>,
+                   4,
+                   referenceBasedModifierSet.size()
+           );
+       }
+   } 
+   </pre></div><div class="col-6"><h5>right.java</h5><pre class="pre-scrollable">/**
+    * Copyright (C) 2006-2018 INRIA and contributors
+    * Spoon - http://spoon.gforge.inria.fr/
+    *
+    * This software is governed by the CeCILL-C License under French law and
+    * abiding by the rules of distribution of free software. You can use, modify
+    * and/or redistribute the software under the terms of the CeCILL-C license as
+    * circulated by CEA, CNRS and INRIA at http://www.cecill.info.
+    *
+    * This program is distributed in the hope that it will be useful, but WITHOUT
+    * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+    * FITNESS FOR A PARTICULAR PURPOSE. See the CeCILL-C License for more details.
+    *
+    * The fact that you are presently reading this means that you have had
+    * knowledge of the CeCILL-C license and that you accept its terms.
+    */
+   package spoon.reflect.ast;
+   
+   
+   <span class="marker" id="mapping-31"></span><span class="token mv" id="move-dst-1" data-title="CompilationUnit/ImportDeclaration">import java.io.File;</span>
+   <span class="marker" id="mapping-32"></span><span class="token mv" id="move-dst-2" data-title="CompilationUnit/ImportDeclaration">import java.util.Collections;</span>
+   <span class="marker" id="mapping-33"></span><span class="token mv" id="move-dst-6" data-title="CompilationUnit/ImportDeclaration">import java.util.HashSet;</span>
+   <span class="marker" id="mapping-34"></span><span class="token mv" id="move-dst-3" data-title="CompilationUnit/ImportDeclaration">import java.util.IdentityHashMap;</span>
+   <span class="marker" id="mapping-35"></span><span class="token mv" id="move-dst-4" data-title="CompilationUnit/ImportDeclaration">import java.util.List;</span>
+   <span class="marker" id="mapping-36"></span><span class="token mv" id="move-dst-5" data-title="CompilationUnit/ImportDeclaration">import java.util.Map;</span>
+   <span class="marker" id="mapping-37"></span><span class="token mv" id="move-dst-7" data-title="CompilationUnit/ImportDeclaration">import java.util.Set;</span>
+   <span class="marker" id="mapping-38"></span><span class="token mv" id="move-dst-8" data-title="CompilationUnit/ImportDeclaration">import java.util.stream.Collectors;</span>
+   
+   <span class="marker" id="mapping-39"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import org.junit.jupiter.api.Test;</span>
+   import spoon.Launcher;
+   import spoon.processing.AbstractProcessor;
+   import spoon.refactoring.Refactoring;
+   import spoon.reflect.CtModel;
+   import spoon.reflect.code.CtConditional;
+   import spoon.reflect.declaration.CtClass;
+   import spoon.reflect.declaration.CtElement;
+   import spoon.reflect.declaration.CtField;
+   import spoon.reflect.declaration.CtInterface;
+   import spoon.reflect.declaration.CtMethod;
+   import spoon.reflect.declaration.CtType;
+   import spoon.reflect.declaration.ModifierKind;
+   import spoon.reflect.factory.Factory;
+   import spoon.reflect.reference.CtExecutableReference;
+   import spoon.reflect.reference.CtReference;
+   import spoon.reflect.visitor.CtScanner;
+   import spoon.reflect.visitor.DefaultJavaPrettyPrinter;
+   import spoon.reflect.visitor.Query;
+   import spoon.reflect.visitor.filter.TypeFilter;
+   import spoon.support.reflect.CtExtendedModifier;
+   import spoon.support.visitor.equals.CloneHelper;
+   import spoon.testing.utils.ModelUtils;
+   
+   <span class="marker" id="mapping-40"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertEquals;</span>
+   <span class="marker" id="mapping-41"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertNotEquals;</span>
+   <span class="marker" id="mapping-42"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertNotNull;</span>
+   <span class="marker" id="mapping-43"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertNull;</span>
+   <span class="marker" id="mapping-44"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertSame;</span>
+   <span class="marker" id="mapping-45"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.assertTrue;</span>
+   <span class="marker" id="mapping-46"></span><span class="token add" data-title="CompilationUnit/ImportDeclaration">import static org.junit.jupiter.api.Assertions.fail;</span>
+   import static spoon.testing.utils.Check.assertCtElementEquals;
+   
+   <span class="marker" id="mapping-47"></span><span class="token add" data-title="TypeDeclaration/Modifier">public</span> <span class="marker" id="mapping-48"></span><span class="token add" data-title="TypeDeclaration/TYPE_DECLARATION_KIND">class</span> <span class="marker" id="mapping-49"></span><span class="token add" data-title="TypeDeclaration/SimpleName">CloneTest</span> {
+   
+       @Test
+       public void testCloneMethodsDeclaredInAST() {
+           final Launcher launcher = new Launcher();
+           launcher.setArgs(new String[] {"--output-type", "nooutput" });
+           launcher.getEnvironment().setNoClasspath(true);
+           // interfaces.
+           launcher.addInputResource("./src/main/java/spoon/reflect/code");
+           launcher.addInputResource("./src/main/java/spoon/reflect/declaration");
+           launcher.addInputResource("./src/main/java/spoon/reflect/reference");
+           // implementations.
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/code");
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/declaration");
+           launcher.addInputResource("./src/main/java/spoon/support/reflect/reference");
+           launcher.run();
+   
+           new CtScanner() {
+               @Override
+               public &lt;T&gt; void visitCtClass(CtClass&lt;T&gt; ctClass) {
+                   if (!ctClass.getSimpleName().startsWith("Ct")) {
+                       return;
+                   }
+                   final CtMethod&lt;Object&gt; clone = ctClass.getMethod("clone");
+                   assertNotNull(<span class="marker" id="mapping-50"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">clone</span>, ctClass.getQualifiedName() + " hasn't clone method.");
+                   assertTrue(clone.getAnnotations().stream().map( ctAnnotation -&gt; ctAnnotation.getActualAnnotation().annotationType()).collect(Collectors.toList()).contains(Override.class), <span class="marker" id="mapping-51"></span><span class="token mv" id="move-dst-9" data-title="METHOD_INVOCATION_ARGUMENTS/InfixExpression">ctClass.getQualifiedName() + " hasn't Override annotation on clone method."</span>);
+               }
+   
+               @Override
+               public &lt;T&gt; void visitCtInterface(CtInterface&lt;T&gt; intrface) {
+                   if (!intrface.getSimpleName().startsWith("Ct")) {
+                       return;
+                   }
+                   final CtMethod&lt;Object&gt; clone = intrface.getMethod("clone");
+                   if (hasConcreteImpl(intrface)) {
+                       assertNotNull(<span class="marker" id="mapping-52"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">clone</span>, intrface.getQualifiedName() + <span class="marker" id="mapping-53"></span><span class="token upd" id="move-dst-10" data-title="InfixExpression/StringLiteral"><span class="cupd">" has</span><span class="cupd">'t clone method."</span></span>);
+                       if (!isRootDeclaration(intrface)) {
+                           assertTrue(clone.getAnnotations().stream().map( ctAnnotation -&gt; ctAnnotation.getActualAnnotation().annotationType()).collect(Collectors.toList()).contains(Override.class), <span class="marker" id="mapping-54"></span><span class="token mv" id="move-dst-11" data-title="METHOD_INVOCATION_ARGUMENTS/InfixExpression">intrface.getQualifiedName() + <span class="marker" id="mapping-55"></span><span class="token upd" id="move-dst-12" data-title="InfixExpression/StringLiteral"><span class="cupd">" hasn't Override</span> <span class="cupd">annotation on clone method."</span></span></span>);
+                       }
+                   }
+               }
+   
+               private &lt;T&gt; boolean hasConcreteImpl(CtInterface&lt;T&gt; intrface) {
+                   return !Query.getElements(intrface.getFactory(), new TypeFilter&lt;CtClass&lt;?&gt;&gt;(CtClass.class) {
+                       @Override
+                       public boolean matches(CtClass&lt;?&gt; element) {
+                           return super.matches(element) &amp;&amp; element.getSuperInterfaces().contains(intrface.getReference());
+                       }
+                   }).isEmpty();
+               }
+   
+               private &lt;T&gt; boolean isRootDeclaration(CtInterface&lt;T&gt; intrface) {
+                   return "CtElement".equals(intrface.getSimpleName());
+               }
+           }.scan(launcher.getModel().getRootPackage());
+       }
+   
+       @Test
+       public void testCloneCastConditional() {
+           final Launcher launcher = new Launcher();
+           launcher.setArgs(new String[] {"--output-type", "nooutput" });
+           launcher.getEnvironment().setNoClasspath(true);
+   
+           launcher.addInputResource("./src/test/resources/spoon/test/visitor/ConditionalRes.java");
+   
+           launcher.addProcessor(new AbstractProcessor&lt;CtConditional&lt;?&gt;&gt;() {
+               @Override
+               public void process(CtConditional&lt;?&gt; conditional) {
+                   CtConditional clone = conditional.clone();
+                   assertEquals(0, conditional.getTypeCasts().size());
+                   assertEquals(0, clone.getTypeCasts().size());
+                   assertEquals(conditional, clone);
+                   conditional.addTypeCast(getFactory().Type().bytePrimitiveType());
+                   assertEquals(1, conditional.getTypeCasts().size());
+                   assertNotEquals(conditional, clone);
+                   clone = conditional.clone();
+                   assertEquals(conditional, clone);
+                   assertEquals(1, clone.getTypeCasts().size());
+               }
+           });
+           launcher.run();
+       }
+   
+       @Test
+       public void testCloneListener() {
+           // contract: it is possible to extend the cloning behavior
+   
+           // in this example extension, a listener of cloning process gets access to origin node and cloned node
+           // we check the contract with some complicated class as target of cloning
+           Factory factory = ModelUtils.build(new File("./src/main/java/spoon/reflect/visitor/DefaultJavaPrettyPrinter.java"));
+           CtType&lt;?&gt; cloneSource = factory.Type().get(DefaultJavaPrettyPrinter.class);
+           class CloneListener extends CloneHelper {
+               Map&lt;CtElement, CtElement&gt; sourceToTarget = new IdentityHashMap&lt;&gt;();
+               @Override
+               public &lt;T extends CtElement&gt; T clone(T source) {
+                   if (source == null) {
+                       return null;
+                   }
+                   T target = super.clone(source);
+                   onCloned(source, target);
+                   return target;
+               }
+               private void onCloned(CtElement source, CtElement target) {
+                   CtElement previousTarget = sourceToTarget.put(source, target);
+                   assertNull(previousTarget);
+               }
+           }
+   
+           CloneListener cl = new CloneListener();
+           CtType&lt;?&gt; cloneTarget = cl.clone(cloneSource);
+   
+           cloneSource.filterChildren(null).forEach(sourceElement -&gt; {
+               //contract: there exists cloned target for each visitable element
+               CtElement targetElement = cl.sourceToTarget.remove(sourceElement);
+               assertNotNull(<span class="marker" id="mapping-56"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/SimpleName">targetElement</span>, "Missing target for sourceElement\n" + sourceElement);
+               assertCtElementEquals((CtElement) sourceElement, targetElement);
+           });
+           //contract: each visitable elements was cloned exactly once. No more no less.
+           assertTrue(cl.sourceToTarget.isEmpty());
+       }
+   
+       @Test
+       public void testCopyMethod() {
+           // contract: the copied method is well-formed, lookup of executable references is preserved after copying, especially for recursive methods
+           Launcher l = new Launcher();
+           l.getEnvironment().setNoClasspath(true);
+           l.addInputResource("./src/test/resources/noclasspath/A2.java");
+           l.buildModel();
+           CtClass&lt;Object&gt; klass = l.getFactory().Class().get("A2");
+           CtMethod&lt;?&gt; method = klass.getMethodsByName("c").get(0);
+           List&lt;CtExecutableReference&gt; elements = method.getElements(new TypeFilter&lt;&gt;(CtExecutableReference.class));
+           CtExecutableReference methodRef = elements.get(0);
+   
+           // the lookup is OK in the original node
+           assertSame(method, methodRef.getDeclaration());
+   
+           assertEquals("A2", methodRef.getDeclaringType().toString());
+   
+           // we copy the method
+           CtMethod&lt;?&gt; methodClone = method.copyMethod();
+           assertEquals("cCopy", methodClone.getSimpleName());
+   
+           // useful for debug
+           methodClone.getBody().insertBegin(l.getFactory().createCodeSnippetStatement("// debug info"));
+   
+           CtExecutableReference reference = methodClone.getElements(new TypeFilter&lt;&gt;(CtExecutableReference.class)).get(0);
+           // all references have been updated
+           assertEquals("cCopy", reference.getSimpleName());
+           assertSame(methodClone, reference.getDeclaration());
+           assertEquals("A2", methodClone.getDeclaringType().getQualifiedName());
+   
+           // now we may want to rename the copied method
+           Refactoring.changeMethodName(methodClone, "foo");
+           assertEquals("foo", methodClone.getSimpleName()); // the method has been changed
+           assertEquals("foo", reference.getSimpleName()); // the reference has been changed
+           assertSame(methodClone, reference.getDeclaration()); // the lookup still works
+           assertEquals("A2", methodClone.getDeclaringType().getQualifiedName());
+   
+           // one can even copy the method several times
+           methodClone = Refactoring.copyMethod(method);
+           assertEquals("cCopy", methodClone.getSimpleName());
+           methodClone = Refactoring.copyMethod(method);
+           assertEquals("cCopyX", methodClone.getSimpleName());
+       }
+   
+       @Test
+       public void testCopyType() {
+           // contract: the copied type is well formed, it never points to the initial type
+           Factory factory = ModelUtils.build(new File("./src/main/java/spoon/reflect/visitor/DefaultJavaPrettyPrinter.java"));
+           CtType&lt;?&gt; intialElement = factory.Type().get(DefaultJavaPrettyPrinter.class);
+           CtType&lt;?&gt; cloneTarget = intialElement.copyType();
+           assertEquals("spoon.reflect.visitor.DefaultJavaPrettyPrinterCopy", cloneTarget.getQualifiedName());
+           // we go over all references
+           for (CtReference reference: cloneTarget.getElements(new TypeFilter&lt;&gt;(CtReference.class))) {
+               CtElement declaration = reference.getDeclaration();
+               if (declaration == null) {
+                   continue;
+               }
+   
+               // the core assertion: not a single reference points to the initial element
+               if (declaration.hasParent(intialElement)) {
+                   fail();
+               }
+           }
+       }
+   
+       @Test
+       public void testIssue3389() {
+           // test case for https://github.com/INRIA/spoon/issues/3389
+           Launcher launcher = new Launcher();
+           launcher.addInputResource( "./src/test/resources/JavaCode.java" );
+           launcher.buildModel();
+           CtModel model = launcher.getModel();
+   
+           CtType&lt;?&gt; c = launcher.getFactory().Type().get("HelloWorld");
+   
+           // sanity check: the field is at the end as in the source
+           assertEquals(c.getFields().get(0), c.getTypeMembers().get(2));
+   
+           List&lt;CtField&lt;?&gt;&gt; fields = c.getFields();
+           for(CtField&lt;?&gt; field : fields) {
+               c.removeField(field);
+               c.addFieldAtTop(field);
+           }
+   
+           // sanity check: the field is now at the top after the implicit constructor
+           assertEquals(c.getFields().get(0), c.getTypeMembers().get(0));
+   
+           // contract: clone preserves the order
+           assertEquals(c.getFields().get(0), c.clone().getTypeMembers().get(0));
+       }
+   
+       @Test
+       public void testCloneKeepsImplicitModifierState() {
+           // contract: When cloning an element the implicit state is kept as well
+           CtClass&lt;?&gt; test = new Launcher().getFactory().createClass("Test");
+           Set&lt;CtExtendedModifier&gt; modifiers = new HashSet&lt;&gt;();
+           modifiers.add(new CtExtendedModifier(ModifierKind.PUBLIC, true));
+           modifiers.add(new CtExtendedModifier(ModifierKind.ABSTRACT, false));
+           test.setExtendedModifiers(modifiers);
+   
+           CtClass&lt;?&gt; clonedTest = test.clone();
+   
+           // Sanity checks
+           assertEquals(2, test.getExtendedModifiers().size(), <span class="marker" id="mapping-57"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Class has the wrong amount of modifiers"</span>
+           );
+           assertModifierImplicitness(test.getExtendedModifiers(), ModifierKind.PUBLIC, true);
+           assertModifierImplicitness(test.getExtendedModifiers(), ModifierKind.ABSTRACT, false);
+   
+           // Test that the implicit state was kept
+           assertEquals(2, clonedTest.getExtendedModifiers().size(), <span class="marker" id="mapping-58"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Clone has wrong amount of modifiers"</span>
+           );
+           assertModifierImplicitness(clonedTest.getExtendedModifiers(), ModifierKind.PUBLIC, true);
+           assertModifierImplicitness(clonedTest.getExtendedModifiers(), ModifierKind.ABSTRACT, false);
+       }
+   
+       private void assertModifierImplicitness(Set&lt;CtExtendedModifier&gt; modifiers, ModifierKind kind,
+               boolean shouldBeImplicit) {
+           for (CtExtendedModifier modifier : modifiers) {
+               if (modifier.getKind() == kind) {
+                   assertEquals(shouldBeImplicit, modifier.isImplicit(), <span class="marker" id="mapping-59"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"Unexpected CtExtendedModifier#isImplicit"</span>
+                   );
+                   return;
+               }
+           }
+           fail("Modifier " + kind + " was not found at all in " + modifiers);
+       }
+   
+       @Test
+       public void testCloneClonesExtendedModifiers() {
+           // contract: When cloning an element the extended modifiers are cloned as well
+           CtClass&lt;?&gt; test = new Launcher().getFactory().createClass("Test");
+           Set&lt;CtExtendedModifier&gt; modifiers = new HashSet&lt;&gt;();
+           modifiers.add(new CtExtendedModifier(ModifierKind.PUBLIC, true));
+           modifiers.add(new CtExtendedModifier(ModifierKind.ABSTRACT, false));
+           test.setExtendedModifiers(modifiers);
+   
+           CtClass&lt;?&gt; clonedTest = test.clone();
+   
+           assertModifiersAreDistinctInstances(
+                   test.getExtendedModifiers(),
+                   clonedTest.getExtendedModifiers()
+           );
+       }
+   
+       private void assertModifiersAreDistinctInstances(Set&lt;CtExtendedModifier&gt; real,
+               Set&lt;CtExtendedModifier&gt; cloned) {
+           Set&lt;CtExtendedModifier&gt; referenceBasedModifierSet = Collections.newSetFromMap(
+                   new IdentityHashMap&lt;&gt;()
+           );
+           referenceBasedModifierSet.addAll(real);
+           referenceBasedModifierSet.addAll(cloned);
+   
+           // Verify the modifier instances are actually different so changes in one do not affect the other
+           assertEquals(4, referenceBasedModifierSet.size(), <span class="marker" id="mapping-60"></span><span class="token add" data-title="METHOD_INVOCATION_ARGUMENTS/StringLiteral">"The extended modifiers are the same instance as the original"</span>
+           );
+       }
+   }
+   </pre></div></div></div></body></html>
+   
