@@ -9,7 +9,7 @@ from typing import Union
 
 class Preprocessor:
     DATASET_DIRECTORY = pathlib.Path(__file__).parent / "dataset"
-    PROCESSED_DIRECTORY = pathlib.Path(__file__).parent / "processed"
+    ONLY_PRS = pathlib.Path(__file__).parent / "only_prs"
     JAVA_DIRECTORY = pathlib.Path(__file__).parent / "java"
     NO_BOT_DIRECTORY = pathlib.Path(__file__).parent / "nobot"
     ATLEAST_ONE_JAVA_FILE = pathlib.Path(__file__).parent / "java_files"
@@ -55,13 +55,13 @@ class Preprocessor:
 
     @classmethod
     def _pull_request_event(cls):
-        if os.path.exists(cls.PROCESSED_DIRECTORY):
+        if os.path.exists(cls.ONLY_PRS):
             return
 
         def pr(event):
             return event["type"] == "PullRequestEvent"
 
-        cls.process(cls.DATASET_DIRECTORY, cls.PROCESSED_DIRECTORY, pr)
+        cls.process(cls.DATASET_DIRECTORY, cls.ONLY_PRS, pr)
 
     @classmethod
     def _java_project(cls):
@@ -71,7 +71,7 @@ class Preprocessor:
             )
 
         cls.process(
-            cls.PROCESSED_DIRECTORY,
+            cls.ONLY_PRS,
             cls.JAVA_DIRECTORY,
             java,
         )
