@@ -1,4 +1,6 @@
+import datetime
 import json
+import logging
 import os
 import pathlib
 import requests
@@ -11,6 +13,11 @@ class Preprocessor:
     JAVA_DIRECTORY = pathlib.Path(__file__).parent / "java"
     NO_BOT_DIRECTORY = pathlib.Path(__file__).parent / "nobot"
     ATLEAST_ONE_JAVA_FILE = pathlib.Path(__file__).parent / "java_files"
+
+    def __init__(self) -> None:
+        logging.basicConfig(
+            filename=f"logs/{datetime.datetime.now()}.log", level=logging.DEBUG
+        )
 
     @classmethod
     def process(
@@ -99,11 +106,10 @@ class Preprocessor:
                 raise Exception("API requests limit reached")
 
             if res.status_code == 422:
-                print(f"The weird PR: {files_url}")
+                logging.warning(f"The weird PR: {files_url}")
                 return False
 
             data = res.json()
-            print(files_url)
             for file in data:
                 if file["filename"][-5:] == ".java":
                     return True
